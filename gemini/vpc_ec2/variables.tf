@@ -1,6 +1,5 @@
-// variables.tf
 variable "region" {
-  description = "AWS region"
+  description = "AWS region for the infrastructure"
   type        = string
 }
 
@@ -30,16 +29,16 @@ variable "private_subnet_az" {
 }
 
 variable "ami" {
-  description = "AMI ID for EC2 instances"
+  description = "AMI ID for the EC2 instances"
   type        = string
 }
 
 variable "instance_type" {
-  description = "EC2 instance type"
+  description = "Instance type for the EC2 instances"
   type        = string
 }
 
 variable "key_name" {
-  description = "Key pair name for SSH access to EC2 instances"
+  description = "Name of the key pair to use for the instances"
   type        = string
 }

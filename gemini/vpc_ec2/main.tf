@@ -1,96 +1,106 @@
-// main.tf
-resource "aws_vpc" "main_vpc" {
+# 1. VPC Creation
+resource "aws_vpc" "main" {
   cidr_block = var.vpc_cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true
   tags = {
     Name = "tf-vpc"
   }
 }
 
-resource "aws_internet_gateway" "main_igw" {
-  vpc_id = aws_vpc.main_vpc.id
+# 2. Subnet Creation
+# Public Subnet
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.public_subnet_cidr
+  availability_zone       = var.public_subnet_az
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "tf-public-subnet"
+  }
+}
+
+# Private Subnet
+resource "aws_subnet" "private" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.private_subnet_cidr
+  availability_zone       = var.private_subnet_az
+  map_public_ip_on_launch = false
+  tags = {
+    Name = "tf-private-subnet"
+  }
+}
+
+# 3. Internet Gateway
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
   tags = {
     Name = "tf-igw"
   }
 }
 
-resource "aws_subnet" "public_subnet" {
-  vpc_id            = aws_vpc.main_vpc.id
-  cidr_block        = var.public_subnet_cidr
-  availability_zone = var.public_subnet_az
-  map_public_ip_on_launch = true
+# 4. Elastic IP and NAT Gateway
+resource "aws_eip" "nat" {
+  domain   = "vpc"
+  depends_on = [aws_internet_gateway.main]
   tags = {
-    Name = "public-subnet-1"
+    Name = "tf-nat-eip"
   }
 }
 
-resource "aws_subnet" "private_subnet" {
-  vpc_id            = aws_vpc.main_vpc.id
-  cidr_block        = var.private_subnet_cidr
-  availability_zone = var.private_subnet_az
+resource "aws_nat_gateway" "main" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public.id
   tags = {
-    Name = "private-subnet-1"
+    Name = "tf-nat-gateway"
+  }
+  depends_on = [aws_internet_gateway.main]
+}
+
+# 5. Route Tables
+# Public Route Table
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+  tags = {
+    Name = "tf-public-rt"
   }
 }
 
-resource "aws_eip" "nat_gateway_eip" {
-  vpc = true
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+
+# Private Route Table
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.main.id
+  }
   tags = {
-    Name = "nat-gateway-eip"
+    Name = "tf-private-rt"
   }
 }
 
-resource "aws_nat_gateway" "main_nat_gateway" {
-  allocation_id = aws_eip.nat_gateway_eip.id
-  subnet_id     = aws_subnet.public_subnet.id
-  tags = {
-    Name = "main-nat-gateway"
-  }
-  depends_on = [aws_internet_gateway.main_igw]
+resource "aws_route_table_association" "private" {
+  subnet_id      = aws_subnet.private.id
+  route_table_id = aws_route_table.private.id
 }
 
-resource "aws_route_table" "public_route_table" {
-  vpc_id = aws_vpc.main_vpc.id
-  tags = {
-    Name = "public-route-table"
-  }
-}
-
-resource "aws_route" "public_internet_route" {
-  route_table_id         = aws_route_table.public_route_table.id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.main_igw.id
-}
-
-resource "aws_route_table_association" "public_subnet_association" {
-  subnet_id      = aws_subnet.public_subnet.id
-  route_table_id = aws_route_table.public_route_table.id
-}
-
-resource "aws_route_table" "private_route_table" {
-  vpc_id = aws_vpc.main_vpc.id
-  tags = {
-    Name = "private-route-table"
-  }
-}
-
-resource "aws_route" "private_nat_route" {
-  route_table_id         = aws_route_table.private_route_table.id
-  destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id         = aws_nat_gateway.main_nat_gateway.id
-}
-
-resource "aws_route_table_association" "private_subnet_association" {
-  subnet_id      = aws_subnet.private_subnet.id
-  route_table_id = aws_route_table.private_route_table.id
-}
-
+# 6. Security Groups
+# Public Security Group
 resource "aws_security_group" "public_sg" {
   name        = "public-sg"
-  description = "Allow inbound SSH (22) and HTTP (80) from anywhere"
-  vpc_id      = aws_vpc.main_vpc.id
+  description = "Allow SSH and HTTP inbound traffic"
+  vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "SSH from VPC"
+    description = "SSH from anywhere"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -98,7 +108,7 @@ resource "aws_security_group" "public_sg" {
   }
 
   ingress {
-    description = "HTTP from VPC"
+    description = "HTTP from anywhere"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -117,13 +127,14 @@ resource "aws_security_group" "public_sg" {
   }
 }
 
+# Private Security Group
 resource "aws_security_group" "private_sg" {
   name        = "private-sg"
-  description = "Allow inbound SSH from within the VPC CIDR"
-  vpc_id      = aws_vpc.main_vpc.id
+  description = "Allow SSH from within the VPC"
+  vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "SSH from VPC"
+    description = "SSH from within VPC"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -142,25 +153,27 @@ resource "aws_security_group" "private_sg" {
   }
 }
 
+# 7. EC2 Instances
+# Public Server
 resource "aws_instance" "public_server" {
   ami           = var.ami
   instance_type = var.instance_type
-  subnet_id     = aws_subnet.public_subnet.id
-  security_groups = [aws_security_group.public_sg.id]
   key_name      = var.key_name
-  associate_public_ip_address = true
+  subnet_id     = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.public_sg.id]
 
   tags = {
     Name = "public-server"
   }
 }
 
+# Private Server
 resource "aws_instance" "private_server" {
   ami           = var.ami
   instance_type = var.instance_type
-  subnet_id     = aws_subnet.private_subnet.id
-  security_groups = [aws_security_group.private_sg.id]
   key_name      = var.key_name
+  subnet_id     = aws_subnet.private.id
+  vpc_security_group_ids = [aws_security_group.private_sg.id]
 
   tags = {
     Name = "private-server"
