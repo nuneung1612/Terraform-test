@@ -1,13 +1,30 @@
-# Create EC2 instances for web servers
-resource "aws_instance" "web_servers" {
-  count         = 2
-  ami           = var.ami_id
-  instance_type = var.ec2_instance_type
-  key_name      = var.key_pair_name
-  subnet_id     = aws_subnet.public_subnets[count.index].id
-  security_groups = [aws_security_group.public_sg.id]
+# Create a DB subnet group for the RDS instance
+resource "aws_db_subnet_group" "db_subnet_group" {
+  name       = "main-db-subnet-group"
+  subnet_ids = [for subnet in aws_subnet.private_subnets : subnet.id]
 
   tags = {
-    Name = "web-server-${count.index + 1}"
+    Name = "main-db-subnet-group"
+  }
+}
+
+# Create the RDS MySQL instance
+resource "aws_db_instance" "main_db" {
+  identifier           = "main-db-instance"
+  engine               = var.db_engine
+  engine_version       = var.db_engine_version
+  instance_class       = var.db_instance_class
+  allocated_storage    = 5
+  db_name              = var.db_name
+  username             = var.db_username
+  password             = var.db_password
+  db_subnet_group_name = aws_db_subnet_group.db_subnet_group.name
+  vpc_security_group_ids = [aws_security_group.private_sg.id]
+  multi_az             = false
+  publicly_accessible  = false
+  skip_final_snapshot  = true
+
+  tags = {
+    Name = "main-database"
   }
 }
