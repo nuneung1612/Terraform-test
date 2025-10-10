@@ -25,6 +25,22 @@
 #   }
 # }
 
+//block ของขนุน
+# data "aws_ami" "amazon_linux_2" {
+#   most_recent = true
+#   owners      = ["amazon"]
+
+#   filter {
+#     name   = "owner-alias"
+#     values = ["amazon"]
+#   }
+
+#   filter {
+#     name   = "name"
+#     values = ["amzn2-ami-hvm*x86_64-gp2"]
+#   }
+# }
+
 resource "aws_instance" "public-web-template-1" {
   ami                    = var.ami_id
   instance_type          = "t2.micro"
@@ -59,7 +75,7 @@ resource "aws_instance" "private-app-template-1" {
   key_name               = var.key_name
 
   tags = {
-    Name = "apptier-instance"
+    Name = "apptier-instance-1"
   }
 }
 
@@ -71,11 +87,6 @@ resource "aws_instance" "private-app-template-2" {
   key_name               = var.key_name
 
   tags = {
-    Name = "apptier-instance"
+    Name = "apptier-instance-2"
   }
 }
-
-
-
-
-

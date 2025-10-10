@@ -94,6 +94,6 @@ variable "key_name" {
 }
 
 variable "ami_id" {
-  default = "ami-0360c520857e3138f"
+  default = "ami-052064a798f08f0d3"
   type = string
 }
